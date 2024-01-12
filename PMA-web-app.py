@@ -1,5 +1,5 @@
 import dash
-from dash import dcc, html, Input, Output, dash_table, State
+from dash import dcc, html, Input, Output, dash_table
 import json
 import requests
 import base64
@@ -13,6 +13,7 @@ import os
 import copy
 import datetime
 
+
 def get_barges_from_json(contents):
     df = pd.json_normalize(contents)
     barges = []
@@ -21,16 +22,17 @@ def get_barges_from_json(contents):
         barges.append(barge['id'])
     return barges
 
-def process_input_for_planning_board(input):
-    planning = copy.deepcopy(input['routes'])
+
+def process_input_for_planning_board(data):
+    planning = copy.deepcopy(data['routes'])
     appended_data = []
     for v in range(len(planning)):
         stops = planning[v]['stops']
         vessel = planning[v]['vessel']
         for stop in stops:
-            if (len(stop['startTime']) < 19):
+            if len(stop['startTime']) < 19:
                 stop['startTime'] = stop['startTime'] + ":00"
-            if (len(stop['departureTime']) < 19):
+            if len(stop['departureTime']) < 19:
                 stop['departureTime'] = stop['departureTime'] + ":00"
         df_stops = pd.DataFrame.from_dict(stops)
         df_stops = df_stops.drop(columns=['loadOrders', 'dischargeOrders'])
@@ -44,40 +46,41 @@ def process_input_for_planning_board(input):
     vessels = df.vessel.unique().tolist()
 
     for vessel in vessels:
-        v = df[df['vessel']==vessel]
-        if (len(v) > 1 and sum(v.iloc[0, -6:]) == 0 and v['teuOnBoardAfterStop'].iloc[0] == 0 and v['weightOnBoardAfterStop'].iloc[0] == 0):
-            df[df['vessel']==vessel] = df[df['vessel']==vessel].iloc[1:, :]
+        v = df[df['vessel'] == vessel]
+        if (len(v) > 1 and sum(v.iloc[0, -6:]) == 0 and v['teuOnBoardAfterStop'].iloc[0] == 0 and
+                v['weightOnBoardAfterStop'].iloc[0] == 0):
+            df[df['vessel'] == vessel] = df[df['vessel'] == vessel].iloc[1:, :]
             df = df.dropna()
-        rowsToRemove = []
+        rows_to_remove = []
         scope = list(v.index.values)
         scope.pop(0)
         for i in scope:
-            if df.iloc[i-1,1] == df.iloc[i,1] and df.iloc[i-1,3] == df.iloc[i,2]:
-                rowsToRemove.append(i)
-                df.iloc[i-1,3] = df.iloc[i,3]
-                df.iloc[i-1,4] = df.iloc[i,4]
-                df.iloc[i-1,5] = df.iloc[i,5]
-                df.iloc[i-1,6] = df.iloc[i-1,6] + df.iloc[i,6]
-                df.iloc[i-1,7] = df.iloc[i-1,7] + df.iloc[i,7]
-                df.iloc[i-1,8] = df.iloc[i-1,8] + df.iloc[i,8]
-                df.iloc[i-1,9] = df.iloc[i-1,9] + df.iloc[i,9]
-                df.iloc[i-1,10] = df.iloc[i-1,10] + df.iloc[i,10]
-                df.iloc[i-1,11] = df.iloc[i-1,11] + df.iloc[i,11]
-                if (i+1 <= scope[-1]):
-                    ind = scope.index(i)+1
+            if df.iloc[i - 1, 1] == df.iloc[i, 1] and df.iloc[i - 1, 3] == df.iloc[i, 2]:
+                rows_to_remove.append(i)
+                df.iloc[i - 1, 3] = df.iloc[i, 3]
+                df.iloc[i - 1, 4] = df.iloc[i, 4]
+                df.iloc[i - 1, 5] = df.iloc[i, 5]
+                df.iloc[i - 1, 6] = df.iloc[i - 1, 6] + df.iloc[i, 6]
+                df.iloc[i - 1, 7] = df.iloc[i - 1, 7] + df.iloc[i, 7]
+                df.iloc[i - 1, 8] = df.iloc[i - 1, 8] + df.iloc[i, 8]
+                df.iloc[i - 1, 9] = df.iloc[i - 1, 9] + df.iloc[i, 9]
+                df.iloc[i - 1, 10] = df.iloc[i - 1, 10] + df.iloc[i, 10]
+                df.iloc[i - 1, 11] = df.iloc[i - 1, 11] + df.iloc[i, 11]
+                if (i + 1 <= scope[-1]):
+                    ind = scope.index(i) + 1
                     scope2 = scope[ind:]
                     for j in scope2:
-                        if (df.iloc[i-1,1] == df.iloc[j,1] and df.iloc[i-1,3] == df.iloc[j,2]):
-                            df.iloc[i-1,3] = df.iloc[j,3]
-                            df.iloc[i-1,4] = df.iloc[j,4]
-                            df.iloc[i-1,5] = df.iloc[j,5]
-                            df.iloc[i-1,6] = df.iloc[i-1,6] + df.iloc[j,6]
-                            df.iloc[i-1,7] = df.iloc[i-1,7] + df.iloc[j,7]
-                            df.iloc[i-1,8] = df.iloc[i-1,8] + df.iloc[j,8]
-                            df.iloc[i-1,9] = df.iloc[i-1,9] + df.iloc[j,9]
-                            df.iloc[i-1,10] = df.iloc[i-1,10] + df.iloc[j,10]
-                            df.iloc[i-1,11] = df.iloc[i-1,11] + df.iloc[j,11]              
-    df[df['vessel']==vessel] = df[df['vessel']==vessel].drop(index=rowsToRemove)
+                        if df.iloc[i - 1, 1] == df.iloc[j, 1] and df.iloc[i - 1, 3] == df.iloc[j, 2]:
+                            df.iloc[i - 1, 3] = df.iloc[j, 3]
+                            df.iloc[i - 1, 4] = df.iloc[j, 4]
+                            df.iloc[i - 1, 5] = df.iloc[j, 5]
+                            df.iloc[i - 1, 6] = df.iloc[i - 1, 6] + df.iloc[j, 6]
+                            df.iloc[i - 1, 7] = df.iloc[i - 1, 7] + df.iloc[j, 7]
+                            df.iloc[i - 1, 8] = df.iloc[i - 1, 8] + df.iloc[j, 8]
+                            df.iloc[i - 1, 9] = df.iloc[i - 1, 9] + df.iloc[j, 9]
+                            df.iloc[i - 1, 10] = df.iloc[i - 1, 10] + df.iloc[j, 10]
+                            df.iloc[i - 1, 11] = df.iloc[i - 1, 11] + df.iloc[j, 11]
+    df[df['vessel'] == vessel] = df[df['vessel'] == vessel].drop(index=rows_to_remove)
 
     # date_format = '%Y-%m-%dT%H:%M:%S'
     # df['startTime'] = pd.to_datetime(df['startTime'], format=date_format)
@@ -86,8 +89,9 @@ def process_input_for_planning_board(input):
     # df['departureTime'] = df['departureTime'].astype(str)
     return df
 
-def load_and_process_kpis(input):
-    planning = copy.deepcopy(input['routes'])
+
+def load_and_process_kpis(data):
+    planning = copy.deepcopy(data['routes'])
     appended_data = []
     for v in range(len(planning)):
         stops = planning[v]['stops']
@@ -101,82 +105,80 @@ def load_and_process_kpis(input):
     df = pd.concat(appended_data)
     # df.to_excel("json_to_excel.xlsx")
 
-    unplanned = input['unplannedOrders']
+    unplanned = data['unplannedOrders']
     n_unplanned = len(unplanned)
     n_planned = df['discharging20'].sum() + df['discharging40'].sum() + df['discharging45'].sum()
 
     vessels = df['vessel'].unique()
     unused = []
     for vessel in vessels:
-        for s in reversed(range(len(df[df['vessel']==vessel]))):
-            if (df[df['vessel']==vessel]['fixedStop'].iloc[s]==False):
-                if(df[df['vessel']==vessel]['loading20'].iloc[s]>0 or df[df['vessel']==vessel]['loading40'].iloc[s]>0 or df[df['vessel']==vessel]['loading45'].iloc[s]>0):
+        for s in reversed(range(len(df[df['vessel'] == vessel]))):
+            if not df[df['vessel'] == vessel]['fixedStop'].iloc[s]:
+                if (df[df['vessel'] == vessel]['loading20'].iloc[s] > 0 or
+                        df[df['vessel'] == vessel]['loading40'].iloc[s] > 0 or
+                        df[df['vessel'] == vessel]['loading45'].iloc[s] > 0):
                     break
                 else:
-                    if (df[df['vessel']==vessel]['fixedStop'].iloc[s-1]==True):
+                    if df[df['vessel'] == vessel]['fixedStop'].iloc[s - 1]:
                         unused.append(vessel)
-            elif (s == len(df[df['vessel']==vessel])-1):
+            elif s == len(df[df['vessel'] == vessel]) - 1:
                 unused.append(vessel)
 
     n_stops = 0
-    for r in range(1,len(df)):
-        vessel1 = df['vessel'].iloc[r-1]
+    for r in range(1, len(df)):
+        vessel1 = df['vessel'].iloc[r - 1]
         vessel2 = df['vessel'].iloc[r]
-        if (vessel1 == vessel2):
-            terminal1 = df['terminalId'].iloc[r-1]
+        if vessel1 == vessel2:
+            terminal1 = df['terminalId'].iloc[r - 1]
             terminal2 = df['terminalId'].iloc[r]
-            if (terminal1 != terminal2):
+            if terminal1 != terminal2:
                 n_stops = n_stops + 1
     n_stops = n_stops + len(vessels)
 
     distance_sailed = 0
-    for i in range(len(input['routes'])):
-        distance_sailed = distance_sailed + input['routes'][i]['distanceSailed']
+    for i in range(len(data['routes'])):
+        distance_sailed = distance_sailed + data['routes'][i]['distanceSailed']
 
     planning_time = end - start
 
     return n_planned, n_unplanned, unused, n_stops, distance_sailed, planning_time, unplanned
 
+
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 bootstrap_stylesheets = ['https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css']
 
 app = dash.Dash(__name__, external_stylesheets=bootstrap_stylesheets, suppress_callback_exceptions=True)
+
+
 # server = app.server
 
 def create_planning_board(df):
     global timestamp
     print(df)
     vessels = df.vessel.unique().tolist()
-    fig = px.timeline(df, x_start='startTime', x_end='departureTime', y='vessel', color='terminalId', 
-                hover_data=["loading20", "loading40", "loading45", "discharging20", "discharging40", "discharging45", "teuOnBoardAfterStop", "weightOnBoardAfterStop"], 
-                color_discrete_sequence=px.colors.qualitative.Alphabet, height=len(vessels)*80, width=len(vessels)*400)
-    fig.update_yaxes(autorange="reversed") # otherwise tasks are listed from the bottom up
-    
+    fig = px.timeline(df, x_start='startTime', x_end='departureTime', y='vessel', color='terminalId',
+                      hover_data=["loading20", "loading40", "loading45", "discharging20", "discharging40",
+                                  "discharging45", "teuOnBoardAfterStop", "weightOnBoardAfterStop"],
+                      color_discrete_sequence=px.colors.qualitative.Alphabet, height=len(vessels) * 80,
+                      width=len(vessels) * 400)
+    fig.update_yaxes(autorange="reversed")  # otherwise tasks are listed from the bottom up
+
     date_format = '%Y-%m-%dT%H:%M:%SZ'
     timestamp = pd.to_datetime(timestamp, format=date_format) + datetime.timedelta(days=2)
 
     fig.add_vline(x=timestamp)
-    # fig.update_traces(marker_line_color='#2E3440', marker_line_width=2)
-    # fig.update_layout(font_family='Arial', font_size=14)
-    # fig.update_layout(legend=dict(
-    #     orientation="h",
-    #     yanchor="bottom",
-    #     y=1.02,
-    #     xanchor="right",
-    #     x=0.6,
-    #     font_size=10
-    # ))
     return fig
 
-fig = go.Figure(go.Scatter(x=[], y = []))
-fig.update_layout(template = None)
-fig.update_xaxes(showgrid = False, showticklabels = False, zeroline=False)
-fig.update_yaxes(showgrid = False, showticklabels = False, zeroline=False)
+
+fig = go.Figure(go.Scatter(x=[], y=[]))
+fig.update_layout(template=None)
+fig.update_xaxes(showgrid=False, showticklabels=False, zeroline=False)
+fig.update_yaxes(showgrid=False, showticklabels=False, zeroline=False)
 
 # Define the app layout
 app.layout = html.Div([
     dbc.Row([
-        dbc.Col(width=3), # A fake col to keep the title in center no matter what...
+        dbc.Col(width=3),  # A fake col to keep the title in center no matter what...
         dbc.Col(
             html.H1(children=['PMA', html.Sup('TM'), ' web app by ']),
             width=3,
@@ -223,39 +225,39 @@ app.layout = html.Div([
     html.Div(children=[
         html.Label('Travel distance (minimization priority)'),
         dcc.Slider(
-            id = 'w1_slider',
+            id='w1_slider',
             min=0,
             max=1,
-            step = 0.1,
-            marks={str(i/10) : str(i/10) for i in range(11)},
+            step=0.1,
+            marks={str(i / 10): str(i / 10) for i in range(11)},
             value=0.1,
         ),
         html.Label('Number of stops (minimization priority)'),
         dcc.Slider(
-            id = 'w2_slider',
+            id='w2_slider',
             min=0,
             max=1,
-            step = 0.1,
-            marks={str(i/10) : str(i/10) for i in range(11)},
+            step=0.1,
+            marks={str(i / 10): str(i / 10) for i in range(11)},
             value=0.5,
         ),
         html.Label('Unplanned/late containers (minimization priority)'),
         dcc.Slider(
-            id = 'w3_slider',
+            id='w3_slider',
             min=0,
             max=1,
-            step = 0.1,
-            marks={str(i/10) : str(i/10) for i in range(11)},
+            step=0.1,
+            marks={str(i / 10): str(i / 10) for i in range(11)},
             value=0.5,
         ),
     ]),
     html.Br(),
     html.Div([
         dbc.Button('Plan', size='lg', id='make-planning', n_clicks=0, style={
-                    'borderColor': '#DA680F',
-                    'color': '#DA680F',
-                    'background-color': '#0d0c0b',
-                    'font-weight': 'bold'}),
+            'borderColor': '#DA680F',
+            'color': '#DA680F',
+            'background-color': '#0d0c0b',
+            'font-weight': 'bold'}),
     ], style={'textAlign': 'center'}),
     html.Br(),
     html.Div(id='result'),
@@ -267,10 +269,10 @@ app.layout = html.Div([
     html.Div([
         html.Div(
             dcc.Graph(
-                id = 'planning_board',
-                figure = fig,),
+                id='planning_board',
+                figure=fig, ),
         )
-    ], style={'overflowX': 'scroll', 
+    ], style={'overflowX': 'scroll',
               'height': '85vh',
               'width': '99vw'}),
     html.Br(),
@@ -281,13 +283,13 @@ app.layout = html.Div([
     # html.Div(id='hoi')
 ])
 
-
 # Global variable to store the imported JSON output of PMA
 pma_json = None
 
+
 def parse_contents():
     k = 0
-    while (imported_output_json is None):
+    while imported_output_json is None:
         k = k + 1
 
     planning = copy.deepcopy(imported_output_json['routes'])
@@ -329,10 +331,12 @@ def parse_contents():
         ),
     ])
 
+
 orders_df = None
 terminals_df = None
 vessels_df = None
 timestamp = None
+
 
 def parse_input(contents):
     global orders_df
@@ -343,44 +347,57 @@ def parse_input(contents):
     if contents is not None:
         content_type, content_string = contents.split(',')
         decoded = base64.b64decode(content_string)
-        input = json.loads(decoded)
+        data = json.loads(decoded)
 
-    timestamp = input['timestamp']
+    timestamp = data['timestamp']
 
-    orders = input['orders']
-    orders_df = pd.DataFrame(columns=['orderId', 'containerType', 'TEU', 'weight', 'loadTerminal', 'dischargeTerminal', 'earliestPickUp', 'latestPickUp',
-                                      'earliestDeadline', 'latestDeadline', 'reefer', 'dangerousGoods'])
+    orders = data['orders']
+    orders_df = pd.DataFrame(
+        columns=['orderId', 'containerType', 'TEU', 'weight', 'loadTerminal', 'dischargeTerminal', 'earliestPickUp',
+                 'latestPickUp',
+                 'earliestDeadline', 'latestDeadline', 'reefer', 'dangerousGoods'])
     for order in orders:
-        if (order['reefer']):
+        if order['reefer']:
             reefer = 'yes'
         else:
             reefer = 'no'
-        if (order['dangerGoods']):
-            dangerousGoods = 'yes'
+        if order['dangerGoods']:
+            dangerous_goods = 'yes'
         else:
-            dangerousGoods = 'no'
-        newEntry = pd.DataFrame.from_dict({'orderId': [order['orderId']], 'containerType': [order['containerType']], 'TEU': [order['TEU']], 'weight': [order['weight']], 
-                        'loadTerminal': [order['loadTerminal']], 'dischargeTerminal': [order['dischargeTerminal']], 'earliestPickUp': [order['loadTimeWindow']['startDateTime']],
-                        'latestPickUp': [order['loadTimeWindow']['endDateTime']], 'earliestDeadline': [order['dischargeTimeWindow']['startDateTime']], 
-                        'latestDeadline': [order['dischargeTimeWindow']['endDateTime']], 'reefer': [reefer], 'dangerousGoods': [dangerousGoods]})
-        orders_df = pd.concat([orders_df, newEntry], ignore_index = True)
+            dangerous_goods = 'no'
+        new_entry = pd.DataFrame.from_dict(
+            {'orderId': [order['orderId']], 'containerType': [order['containerType']], 'TEU': [order['TEU']],
+             'weight': [order['weight']],
+             'loadTerminal': [order['loadTerminal']], 'dischargeTerminal': [order['dischargeTerminal']],
+             'earliestPickUp': [order['loadTimeWindow']['startDateTime']],
+             'latestPickUp': [order['loadTimeWindow']['endDateTime']],
+             'earliestDeadline': [order['dischargeTimeWindow']['startDateTime']],
+             'latestDeadline': [order['dischargeTimeWindow']['endDateTime']], 'reefer': [reefer],
+             'dangerousGoods': [dangerous_goods]})
+        orders_df = pd.concat([orders_df, new_entry], ignore_index=True)
 
-    terminals = input['terminals']
+    terminals = data['terminals']
     terminals_df = pd.DataFrame.from_dict(terminals)
-    terminals_df = terminals_df.drop(columns=['externalId', 'handlingTime', 'baseStopTime', 'openingTimes', 'callCost', 'callSizeFine', 'position'])
+    terminals_df = terminals_df.drop(
+        columns=['externalId', 'handlingTime', 'baseStopTime', 'openingTimes', 'callCost', 'callSizeFine', 'position'])
 
-    vessels_df = pd.DataFrame(columns=['Barge', 'Location', 'Planned arrival', 'Planned departure', 'loadOrders', 'dischargeOrders', 'fixedStop'])
-    for vessel in input['vessels']:
+    vessels_df = pd.DataFrame(
+        columns=['Barge', 'Location', 'Planned arrival', 'Planned departure', 'loadOrders', 'dischargeOrders',
+                 'fixedStop'])
+    for vessel in data['vessels']:
         for stop in vessel['stops']:
-            if (stop['fixedStop']):
-                fixedStop = 'yes'
+            if stop['fixedStop']:
+                fixed_stop = 'yes'
             else:
-                fixedStop = 'no'
+                fixed_stop = 'no'
             # fixedAppointment = stop['fixedAppointment']
-            newEntry = pd.DataFrame.from_dict({'Barge': [vessel['id']], 'Location': [stop['terminalId']], 'Planned arrival': [stop['timeWindow']['startDateTime']], 
-                                               'Planned departure': [stop['timeWindow']['endDateTime']], 'loadOrders': [len(stop['loadOrders'])], 
-                                               'dischargeOrders': [len(stop['dischargeOrders'])], 'fixedStop': [fixedStop]})
-            vessels_df = pd.concat([vessels_df, newEntry], ignore_index = True)
+            new_entry = pd.DataFrame.from_dict({'Barge': [vessel['id']], 'Location': [stop['terminalId']],
+                                                'Planned arrival': [stop['timeWindow']['startDateTime']],
+                                                'Planned departure': [stop['timeWindow']['endDateTime']],
+                                                'loadOrders': [len(stop['loadOrders'])],
+                                                'dischargeOrders': [len(stop['dischargeOrders'])],
+                                                'fixedStop': [fixed_stop]})
+            vessels_df = pd.concat([vessels_df, new_entry], ignore_index=True)
 
     return html.Div([
         dash_table.DataTable(
@@ -433,31 +450,34 @@ def parse_input(contents):
         ),
     ])
 
+
 # Global variable to store the uploaded JSON data
 uploaded_json = None
 imported_output_json = None
 start = None
 end = None
 
+
 # Function to send JSON data as part of a POST request
 def send_json_data(data):
     global start
-    # url = f'http://localhost:8080/api/planning'
-    url = f'https://pma-acc.cofanoapps.com/api/planning'
+    url = f'http://localhost:8080/api/planning'
+    # url = f'https://pma-acc.cofanoapps.com/api/planning'
     username = 'cofano'
-    # password = 'cofano'
-    password = 'cofanopma24601'
+    password = 'cofano'
+    # password = 'cofanopma24601'
     auth = (username, password)
     headers = {'Content-type': 'application/json'}
     r = requests.post(url=url, auth=auth, headers=headers, json=uploaded_json)
 
     if r.status_code == 200:
-        print("POST request was succesful!")
+        print("POST request was successful!")
         print("Response data:", r.text)
         start = time.time()
     else:
         print("POST request failed with status code:", r.status_code)
         print("Response data:", r.text)
+
 
 def adjust_vessels_json(contents, barges_selected):
     df = pd.json_normalize(contents)
@@ -478,39 +498,41 @@ def adjust_vessels_json(contents, barges_selected):
     loaded_orders_notfixed = []
     for i in ind_not_selected:
         for j in range(len(contents['vessels'][i]['stops'])):
-            if (contents['vessels'][i]['stops'][j]['fixedStop'] == False):
+            if not contents['vessels'][i]['stops'][j]['fixedStop']:
                 for k in contents['vessels'][i]['stops'][j]['loadOrders']:
                     loaded_orders_notfixed.append(k)
                 contents['vessels'][i]['stops'][j]['loadOrders'] = []
     for i in ind_not_selected:
         for j in range(len(contents['vessels'][i]['stops'])):
-            if (contents['vessels'][i]['stops'][j]['fixedStop'] == False):
-                res = [k for k in contents['vessels'][i]['stops'][j]['dischargeOrders'] if k not in loaded_orders_notfixed]
+            if not contents['vessels'][i]['stops'][j]['fixedStop']:
+                res = [k for k in contents['vessels'][i]['stops'][j]['dischargeOrders'] if
+                       k not in loaded_orders_notfixed]
                 contents['vessels'][i]['stops'][j]['dischargeOrders'] = res
     for i in ind_not_selected:
         for j in range(len(contents['vessels'][i]['stops'])):
-            if (contents['vessels'][i]['stops'][j]['fixedStop'] == False):
+            if not contents['vessels'][i]['stops'][j]['fixedStop']:
                 if (len(contents['vessels'][i]['stops'][j]['dischargeOrders'])) > 0:
                     contents['vessels'][i]['stops'][j]['fixedStop'] = True
 
-
     return contents
 
+
 def adjust_penalties_json(contents, w1, w2, w3):
-    w1 = 10*w1
-    w2 = 2*w2
-    w3 = 2*w3
+    w1 = 10 * w1
+    w2 = 2 * w2
+    w3 = 2 * w3
 
     days = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY']
     for i in range(len(contents['vessels'])):
-        contents['vessels'][i]['kilometerCost'] = w1*contents['vessels'][i]['kilometerCost']
+        contents['vessels'][i]['kilometerCost'] = w1 * contents['vessels'][i]['kilometerCost']
         for day in days:
-            contents['vessels'][i]['terminalCallCost'][day] = w2*contents['vessels'][i]['terminalCallCost'][day]
+            contents['vessels'][i]['terminalCallCost'][day] = w2 * contents['vessels'][i]['terminalCallCost'][day]
     for i in range(len(contents['terminals'])):
-        contents['terminals'][i]['callCost'] = w2*contents['terminals'][i]['callCost']
+        contents['terminals'][i]['callCost'] = w2 * contents['terminals'][i]['callCost']
     for i in range(len(contents['orders'])):
-        contents['orders'][i]['fine'] = w3*contents['orders'][i]['fine']
+        contents['orders'][i]['fine'] = w3 * contents['orders'][i]['fine']
     return contents
+
 
 def upload_and_send_json(contents, barges, w1, w2, w3):
     global uploaded_json
@@ -529,6 +551,7 @@ def upload_and_send_json(contents, barges, w1, w2, w3):
 
     return ['']
 
+
 def import_output_json(contents):
     global imported_output_json
     global end
@@ -538,7 +561,7 @@ def import_output_json(contents):
         start_time = time.time()
         k = 0
         file_created = os.path.getmtime(filename)
-        while (file_created < start_time):
+        while file_created < start_time:
             if k == 0:
                 print('File created:')
                 print(os.path.getmtime(filename))
@@ -548,11 +571,12 @@ def import_output_json(contents):
             k = k + 1
         end = time.time()
         f = open("planning output", "r")
-        input = json.load(f)
-        imported_output_json = input
+        data = json.load(f)
+        imported_output_json = data
         return [f'Imported PMA output']
 
     return ['']
+
 
 def adjust_fixed_stop(rows):
     print(rows)
@@ -567,14 +591,6 @@ def adjust_fixed_stop(rows):
 def update_input(contents):
     return parse_input(contents)
 
-# @app.callback(
-#     Output('input-data', 'data'),
-#     Input('input-data', 'data'),
-#     prevent_initial_call=True
-# )
-# def update_columns(rows):
-#     rows = adjust_fixed_stop(rows)
-#     return print('hoi')
 
 @app.callback(
     Output('output-data-upload', 'children'),
@@ -587,27 +603,29 @@ def update_input(contents):
     prevent_initial_call=True
 )
 def update_output(contents, n_clicks, barges, w1, w2, w3):
-    if (n_clicks > 0):
+    if n_clicks > 0:
         upload_and_send_json(contents, barges, w1, w2, w3)
         import_output_json(contents)
         return parse_contents()
 
+
 @app.callback(
-    Output('planning_board', 'figure'),  
+    Output('planning_board', 'figure'),
     Input('upload-data', 'contents'),
     prevent_initial_call=True
 )
-def update_figure(contents):    
+def update_figure(contents):
     if contents is None:
         raise PreventUpdate
     k = 0
-    while (imported_output_json is None):
+    while imported_output_json is None:
         k = k + 1
     result = process_input_for_planning_board(imported_output_json)
     return create_planning_board(result)
 
+
 @app.callback(
-    Output('kpis', 'children'),  
+    Output('kpis', 'children'),
     Input('upload-data', 'contents'),
     prevent_initial_call=True
 )
@@ -615,30 +633,34 @@ def show_kpis(contents):
     if contents is None:
         raise PreventUpdate
     k = 0
-    while (imported_output_json is None):
+    while imported_output_json is None:
         k = k + 1
-    n_planned, n_unplanned, unused, n_stops, distance_sailed, planning_time, unplanned = load_and_process_kpis(imported_output_json)
+    n_planned, n_unplanned, unused, n_stops, distance_sailed, planning_time, unplanned = load_and_process_kpis(
+        imported_output_json)
 
-    if (len(unused) > 1):
+    if len(unused) > 1:
         unused = ", ".join(unused)
     else:
         unused = str(unused[0])
 
-    to_print = ['Created a schedule! Number of containers planned: ' + str(n_planned) + ', Number of unplanned containers: ' + 
-                str(n_unplanned) + ', Unused barges: ' + str(unused) + ', Total number of stops: ' + 
-                str(n_stops) + ', Total distance to sail: ' + str(distance_sailed) + ' KM' + ', Number of seconds to create schedule: ' + str(round(planning_time)) + '. \n']
-    if (len(unplanned) > 0):
+    to_print = [
+        'Created a schedule! Number of containers planned: ' + str(n_planned) + ', Number of unplanned containers: ' +
+        str(n_unplanned) + ', Unused barges: ' + str(unused) + ', Total number of stops: ' +
+        str(n_stops) + ', Total distance to sail: ' + str(
+            distance_sailed) + ' KM' + ', Number of seconds to create schedule: ' + str(round(planning_time)) + '. \n']
+    if len(unplanned) > 0:
         unplanned_print = ['\n Unplanned containers: ']
         for u in range(len(unplanned)):
             unplanned_print = unplanned_print + [str(unplanned[u])]
-            if (u < len(unplanned) - 1):
+            if u < len(unplanned) - 1:
                 unplanned_print = unplanned_print + [", "]
         to_print = to_print + unplanned_print
 
     return html.Div(to_print)
 
+
 @app.callback(
-    Output('barge_list', 'children'),  
+    Output('barge_list', 'children'),
     Input('upload-data', 'contents'),
     prevent_initial_call=True
 )
@@ -650,34 +672,15 @@ def barge_checklist(contents):
     uploaded_json = json.loads(decoded)
     barges = get_barges_from_json(uploaded_json)
     return html.Div(children=[
-            html.Label('Select vessels to plan'),
-            dbc.Checklist(id='checklist', options=barges, value=barges, inline=True, label_checked_style={"color": "#DA680F", 'font-weight': 'bold',},
-            input_checked_style={
-                "backgroundColor": "#0d0c0b", 
-                "borderColor": "#DA680F",
-            }, style={'textAlign': 'center'})
-            ])
+        html.Label('Select vessels to plan'),
+        dbc.Checklist(id='checklist', options=barges, value=barges, inline=True,
+                      label_checked_style={"color": "#DA680F", 'font-weight': 'bold', },
+                      input_checked_style={
+                          "backgroundColor": "#0d0c0b",
+                          "borderColor": "#DA680F",
+                      }, style={'textAlign': 'center'})
+    ])
 
-# @app.callback(
-#     Output('input-analysis', 'children'),  
-#     Input('upload-data', 'contents'),
-#     prevent_initial_call=True
-# )
-# def barge_checklist(contents):
-#     if contents is None:
-#         raise PreventUpdate
-#     print(contents)
-#     print(contents)
-    
-
-#     return html.Div(children=[
-#             html.Label('Select vessels to plan'),
-#             dbc.Checklist(id='checklist', options=barges, value=barges, inline=True, label_checked_style={"color": "#DA680F", 'font-weight': 'bold',},
-#             input_checked_style={
-#                 "backgroundColor": "#0d0c0b", 
-#                 "borderColor": "#DA680F",
-#             }, style={'textAlign': 'center'})
-#             ])
 
 if __name__ == '__main__':
     app.run_server(debug=False)
