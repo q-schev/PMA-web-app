@@ -369,7 +369,7 @@ def update_input(data):
 @dash.callback(
     Output('barge_list', 'children'),
     Input('store-input', 'data'),
-    prevent_initial_call=True
+    # prevent_initial_call=True
 )
 def barge_checklist(data):
     if data is None or len(data) == 0:
@@ -401,15 +401,3 @@ def update_output(data, n_clicks, barges, w1, w2, w3):
     if n_clicks > 0:
         upload_and_send_json(data, barges, w1, w2, w3)
         return import_output_json()
-
-
-@dash.callback(
-    Output('output-data-upload', 'children'),
-    Input('store-output', 'data'),
-    prevent_initial_call=True
-)
-def update_output(data):
-    if data is None or len(data) == 0:
-        return html.H3('No new output file generated yet')
-    else:
-        return parse_contents(data)

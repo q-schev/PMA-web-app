@@ -21,12 +21,12 @@ def parse_input(data):
                  'Number of discharge containers', 'Fixed stop'])
     for vessel in data['vessels']:
         for stop in vessel['stops']:
-            new_entry = pd.DataFrame.from_dict({'Barge': vessel['id'], 'Location': stop['terminalId'],
-                                                'Planned arrival': stop['timeWindow']['startDateTime'],
-                                                'Planned departure': stop['timeWindow']['endDateTime'],
-                                                'Number of load containers': len(stop['loadOrders']),
-                                                'Number of discharge containers': len(stop['dischargeOrders']),
-                                                'Fixed stop': stop['fixedStop']})
+            new_entry = pd.DataFrame.from_dict({'Barge': [vessel['id']], 'Location': [stop['terminalId']],
+                                                'Planned arrival': [stop['timeWindow']['startDateTime']],
+                                                'Planned departure': [stop['timeWindow']['endDateTime']],
+                                                'Number of load containers': [len(stop['loadOrders'])],
+                                                'Number of discharge containers': [len(stop['dischargeOrders'])],
+                                                'Fixed stop': [stop['fixedStop']]})
             vessels_df = pd.concat([vessels_df, new_entry], ignore_index=True)
 
     return html.Div([
