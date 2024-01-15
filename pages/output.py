@@ -3,7 +3,6 @@ Example of the register_page defaults
 """
 
 from dash import html, Input, Output, dash_table, dcc
-import dash_bootstrap_components as dbc
 
 import dash
 import pandas as pd
@@ -12,6 +11,8 @@ import plotly.express as px
 import datetime
 
 dash.register_page(__name__)
+
+mapbox_token = 'pk.eyJ1IjoidmlkejkiLCJhIjoiY2xudTE4NnAxMDhwNjJqb2R4azVidmY0ciJ9.xkBMi2PEg1jnC-dZN-7gYA'
 
 fig = go.Figure(go.Scatter(x=[], y=[]))
 fig.update_layout(template=None)
@@ -34,8 +35,18 @@ layout = html.Div([
               'height': '85vh',
               'width': '99vw'}),
     html.Br(),
+    html.Div(id='vessel-dropdown'),
+    html.Div(children=[dcc.Graph(
+        id='map',
+        figure=fig,
+        style={'width': '180vh',
+               'height': '90vh',
+               'display': 'inline-block'}
+    ),
+    ]),
+    html.Br(),
     html.Div(id='output-data-upload'),
-    ])
+])
 
 
 def process_input_for_planning_board(data):
@@ -107,18 +118,19 @@ def process_input_for_planning_board(data):
 
 def create_planning_board(df, data):
     vessels = df.vessel.unique().tolist()
-    fig = px.timeline(df, x_start='startTime', x_end='departureTime', y='vessel', color='terminalId',
-                      hover_data=["loading20", "loading40", "loading45", "discharging20", "discharging40",
-                                  "discharging45", "teuOnBoardAfterStop", "weightOnBoardAfterStop"],
-                      color_discrete_sequence=px.colors.qualitative.Alphabet, height=len(vessels) * 80,
-                      width=len(vessels) * 400)
-    fig.update_yaxes(autorange="reversed")  # otherwise tasks are listed from the bottom up
+    planning_board_fig = px.timeline(df, x_start='startTime', x_end='departureTime', y='vessel', color='terminalId',
+                                     hover_data=["loading20", "loading40", "loading45", "discharging20",
+                                                 "discharging40",
+                                                 "discharging45", "teuOnBoardAfterStop", "weightOnBoardAfterStop"],
+                                     color_discrete_sequence=px.colors.qualitative.Alphabet, height=len(vessels) * 80,
+                                     width=len(vessels) * 400)
+    planning_board_fig.update_yaxes(autorange="reversed")  # otherwise tasks are listed from the bottom up
 
     date_format = '%Y-%m-%dT%H:%M:%SZ'
     timestamp = pd.to_datetime(data['timestamp'], format=date_format) + datetime.timedelta(days=2)
 
-    fig.add_vline(x=timestamp)
-    return fig
+    planning_board_fig.add_vline(x=timestamp)
+    return planning_board_fig
 
 
 def load_and_process_kpis(data):
@@ -211,6 +223,80 @@ def parse_output(data):
     ])
 
 
+def create_map(terminal_data, routes, vessel_name):
+    terminals = []
+    for route in routes:
+        for stop in route['stops']:
+            terminal_id = stop['terminalId']
+            if terminal_id not in terminals:
+                terminals.append(terminal_id)
+
+    map_data = pd.DataFrame(columns=['Terminal', 'Longitude', 'Latitude', 'Color'])
+    for i in range(len(terminals)):
+        name = terminals[i]
+        if name not in map_data['Terminal'].values:
+            for terminal in terminal_data:
+                if terminals[i] == terminal['terminalId']:
+                    lat = terminal['position']['latitude']
+                    lon = terminal['position']['longitude']
+                    map_data.loc[len(map_data)] = [name, lon, lat, 'blue']
+
+    map_fig = go.Figure(
+        go.Scattermapbox(
+            lat=map_data['Latitude'],
+            lon=map_data['Longitude'],
+            text=map_data['Terminal'],
+            textposition='top right',
+            mode='markers+text',
+            marker=go.scattermapbox.Marker(
+                color=map_data['Color']
+
+            )
+        )
+    )
+    j = 0
+    k = 0
+    for route in routes:
+        if route['vessel'] == vessel_name:
+            for stop in route['stops']:
+                current = stop['terminalId']
+                lon1 = float(map_data[map_data['Terminal'] == current]['Longitude'])
+                lat1 = float(map_data[map_data['Terminal'] == current]['Latitude'])
+
+                if j > 0:
+                    lon2 = previous[0]
+                    lat2 = previous[1]
+                    if len(px.colors.sequential.Plasma) <= k:
+                        k = len(px.colors.sequential.Plasma) - k
+                    map_fig.add_trace(go.Scattermapbox(mode='lines',
+                                                       lon=[lon2, lon1],
+                                                       lat=[lat2, lat1],
+                                                       line_color=px.colors.sequential.Plasma[k],
+                                                       ))
+                    k += 1
+                previous = [lon1, lat1]
+
+                j += 1
+
+    map_fig.update_layout(
+        mapbox=dict(
+            accesstoken=mapbox_token,  #
+            center=go.layout.mapbox.Center(lat=52, lon=5),
+            zoom=6
+        )
+    )
+
+    return map_fig
+
+
+def get_vessels_from_data(data):
+    vessels = []
+    fleet = data['vessels']
+    for vessel in fleet:
+        vessels.append(vessel['id'])
+    return vessels
+
+
 @dash.callback(
     Output('planning_board', 'figure'),
     Input('store-output', 'data'),
@@ -219,7 +305,7 @@ def parse_output(data):
 )
 def update_figure(output_data, input_data):
     if output_data is None or len(output_data) == 0:
-        return html.H3('No new output file generated yet')
+        return dash.no_update
     else:
         result = process_input_for_planning_board(output_data)
         return create_planning_board(result, input_data)
@@ -232,7 +318,7 @@ def update_figure(output_data, input_data):
 )
 def show_kpis(data):
     if data is None or len(data) == 0:
-        return html.H3('')
+        return html.H3('No output file generated yet')
     else:
         n_planned, n_unplanned, unused, n_stops, distance_sailed, planning_time, unplanned = load_and_process_kpis(
             data)
@@ -268,3 +354,29 @@ def update_output(data):
         return html.H3('')
     else:
         return parse_output(data)
+
+
+@dash.callback(
+    Output('vessel-dropdown', 'children'),
+    Input('store-input', 'data')
+)
+def update_graph(data):
+    vessels = get_vessels_from_data(data)
+    return html.Div(children=[dcc.Dropdown(
+        vessels,
+        vessels[0],
+        id='vessel'
+    )])
+
+
+@dash.callback(
+    Output('map', 'figure'),
+    Input('store-input', 'data'),
+    Input('store-output', 'data'),
+    Input('vessel', 'value')
+)
+def update_graph(input_data, output_data, vessel_name):
+    if output_data is None or len(output_data) == 0:
+        return dash.no_update
+    else:
+        return create_map(input_data['terminals'], output_data['routes'], vessel_name)
