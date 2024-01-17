@@ -9,6 +9,10 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 import datetime
+import requests
+import polyline
+import shapely.geometry
+import numpy as np
 
 dash.register_page(__name__)
 
@@ -38,6 +42,15 @@ layout = html.Div([
     html.Div(id='vessel-dropdown'),
     html.Div(children=[dcc.Graph(
         id='map',
+        figure=fig,
+        style={'width': '180vh',
+               'height': '90vh',
+               'display': 'inline-block'}
+    ),
+    ]),
+    html.Br(),
+    html.Div(children=[dcc.Graph(
+        id='bar-chart',
         figure=fig,
         style={'width': '180vh',
                'height': '90vh',
@@ -118,12 +131,16 @@ def process_input_for_planning_board(data):
 
 def create_planning_board(df, data):
     vessels = df.vessel.unique().tolist()
+    if len(vessels) > 2:
+        alpha = len(vessels)
+    elif len(vessels) == 2:
+        alpha = 6
     planning_board_fig = px.timeline(df, x_start='startTime', x_end='departureTime', y='vessel', color='terminalId',
                                      hover_data=["loading20", "loading40", "loading45", "discharging20",
                                                  "discharging40",
                                                  "discharging45", "teuOnBoardAfterStop", "weightOnBoardAfterStop"],
-                                     color_discrete_sequence=px.colors.qualitative.Alphabet, height=len(vessels) * 80,
-                                     width=len(vessels) * 400)
+                                     color_discrete_sequence=px.colors.qualitative.Alphabet, height=alpha * 40,
+                                     width=alpha * 600)
     planning_board_fig.update_yaxes(autorange="reversed")  # otherwise tasks are listed from the bottom up
 
     date_format = '%Y-%m-%dT%H:%M:%SZ'
@@ -254,28 +271,65 @@ def create_map(terminal_data, routes, vessel_name):
             )
         )
     )
+    username = 'reader1'
+    password = 'retc42mGp1gZSVL'
+    auth = (username, password)
     j = 0
     k = 0
     for route in routes:
         if route['vessel'] == vessel_name:
             for stop in route['stops']:
-                current = stop['terminalId']
-                lon1 = float(map_data[map_data['Terminal'] == current]['Longitude'])
-                lat1 = float(map_data[map_data['Terminal'] == current]['Latitude'])
+                current_terminal = stop['terminalId']
+                lon1 = float(map_data[map_data['Terminal'] == current_terminal]['Longitude'])
+                lat1 = float(map_data[map_data['Terminal'] == current_terminal]['Latitude'])
 
                 if j > 0:
                     lon2 = previous[0]
                     lat2 = previous[1]
-                    if len(px.colors.sequential.Plasma) <= k:
-                        k = len(px.colors.sequential.Plasma) - k
-                    map_fig.add_trace(go.Scattermapbox(mode='lines',
-                                                       lon=[lon2, lon1],
-                                                       lat=[lat2, lat1],
-                                                       line_color=px.colors.sequential.Plasma[k],
-                                                       ))
-                    k += 1
-                previous = [lon1, lat1]
+                    previous_terminal = previous[2]
+                    url = f"https://idcp-ship.cofanoapps.com/getroutes?from={lat1},{lon1}&to={lat2},{lon2}"
+                    req = requests.get(url=url, auth=auth)
+                    info = req.json()
+                    if len(info) == 1:
+                        if lon2 != lon1:
+                            map_fig.add_trace(go.Scattermapbox(mode='lines',
+                                                               lon=[lon2, lon1],
+                                                               lat=[lat2, lat1],
+                                                               line=dict(
+                                                                   width=1,
+                                                                   color=px.colors.sequential.Plasma[k]
+                                                               ),
+                                                               name='{0} - {1}'.format(str(previous_terminal),
+                                                                                       str(current_terminal))
+                                                               ))
+                    else:
+                        route = info['Routes'][0]
+                        coded_polyline = route['Polyline']
+                        line = polyline.decode(coded_polyline)
+                        lats = []
+                        lons = []
+                        line = shapely.LineString(line)
+                        x, y = line.xy
+                        lats = np.append(lats, x)
+                        lons = np.append(lons, y)
+                        lats = np.append(lats, None)
+                        lons = np.append(lons, None)
+                        map_fig.add_trace(go.Scattermapbox(mode='lines',
+                                                           lat=lats,
+                                                           lon=lons,
+                                                           line=dict(
+                                                               width=1,
+                                                               color=px.colors.sequential.Plasma[k]
+                                                           ),
+                                                           name='{0} - {1}'.format(str(previous_terminal),
+                                                                                   str(current_terminal))
+                                                           ))
 
+                previous = [lon1, lat1, current_terminal]
+
+                k += 1
+                if k == len(px.colors.sequential.Plasma):
+                    k = 0
                 j += 1
 
     map_fig.update_layout(
@@ -295,6 +349,36 @@ def get_vessels_from_data(data):
     for vessel in fleet:
         vessels.append(vessel['id'])
     return vessels
+
+
+def create_bar_chart(routes):
+    no_of_containers_per_teu_per_barge = pd.DataFrame(columns=['Barge', 'Location', 'TEU'])
+    for route in routes:
+        barge = route['vessel']
+        for stop in route['stops']:
+            location = stop['terminalId']
+            teu_loading = stop['loading20'] + 2 * stop['loading40'] + 2.25 * stop['loading45']
+            teu_discharging = stop['discharging20'] + 2 * stop['discharging40'] + 2.25 * stop['discharging45']
+            teu_total = teu_loading + teu_discharging
+            mask = (no_of_containers_per_teu_per_barge.iloc[:, 0] == barge) & (
+                        no_of_containers_per_teu_per_barge.iloc[:, 1] == location)
+            if mask.any():
+                # Find the index of the first matching row
+                index_of_first_match = no_of_containers_per_teu_per_barge.index[mask].tolist()[0]
+
+                # Set the value of the third column for the matching row
+                new_teu_total = no_of_containers_per_teu_per_barge.at[
+                                    index_of_first_match, no_of_containers_per_teu_per_barge.columns[2]] + teu_total
+                no_of_containers_per_teu_per_barge.at[
+                    index_of_first_match, no_of_containers_per_teu_per_barge.columns[2]] = new_teu_total
+            else:
+                no_of_containers_per_teu_per_barge.loc[len(no_of_containers_per_teu_per_barge)] = [barge, location,
+                                                                                               teu_total]
+    no_of_containers_per_teu_per_barge_without_MCT = no_of_containers_per_teu_per_barge[no_of_containers_per_teu_per_barge.iloc[:, 1] != 'MCT']
+    bar_fig = px.bar(no_of_containers_per_teu_per_barge_without_MCT, x='Barge', y='TEU', color='Location',
+                     title='Moves (in TEU) for each barge per terminal')
+
+    return bar_fig
 
 
 @dash.callback(
@@ -326,7 +410,7 @@ def show_kpis(data):
     if len(unused) > 1:
         unused = ", ".join(unused)
     else:
-        unused = str(unused[0])
+        unused = str(unused)
 
     to_print = [
         'Created a schedule! Number of containers planned: ' + str(n_planned) + ', Number of unplanned containers: ' +
@@ -380,3 +464,19 @@ def update_graph(input_data, output_data, vessel_name):
         return dash.no_update
     else:
         return create_map(input_data['terminals'], output_data['routes'], vessel_name)
+
+
+@dash.callback(
+    Output('bar-chart', 'figure'),
+    Input('store-output', 'data'),
+)
+def update_graph(output_data):
+    print("Update Graph Callback Called")
+    if output_data is None or len(output_data) == 0:
+        print("No Output Data")
+        return dash.no_update
+    else:
+        print("Creating Bar Chart")
+        bar_fig = create_bar_chart(output_data['routes'])
+        print("Bar Chart Created")
+        return bar_fig
