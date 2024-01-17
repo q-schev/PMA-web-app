@@ -361,7 +361,7 @@ def create_bar_chart(routes):
             teu_discharging = stop['discharging20'] + 2 * stop['discharging40'] + 2.25 * stop['discharging45']
             teu_total = teu_loading + teu_discharging
             mask = (no_of_containers_per_teu_per_barge.iloc[:, 0] == barge) & (
-                        no_of_containers_per_teu_per_barge.iloc[:, 1] == location)
+                    no_of_containers_per_teu_per_barge.iloc[:, 1] == location)
             if mask.any():
                 # Find the index of the first matching row
                 index_of_first_match = no_of_containers_per_teu_per_barge.index[mask].tolist()[0]
@@ -373,9 +373,10 @@ def create_bar_chart(routes):
                     index_of_first_match, no_of_containers_per_teu_per_barge.columns[2]] = new_teu_total
             else:
                 no_of_containers_per_teu_per_barge.loc[len(no_of_containers_per_teu_per_barge)] = [barge, location,
-                                                                                               teu_total]
-    no_of_containers_per_teu_per_barge_without_MCT = no_of_containers_per_teu_per_barge[no_of_containers_per_teu_per_barge.iloc[:, 1] != 'MCT']
-    bar_fig = px.bar(no_of_containers_per_teu_per_barge_without_MCT, x='Barge', y='TEU', color='Location',
+                                                                                                   teu_total]
+    no_of_containers_per_teu_per_barge_without_mct = no_of_containers_per_teu_per_barge[
+        no_of_containers_per_teu_per_barge.iloc[:, 1] != 'MCT']
+    bar_fig = px.bar(no_of_containers_per_teu_per_barge_without_mct, x='Barge', y='TEU', color='Location',
                      title='Moves (in TEU) for each barge per terminal')
 
     return bar_fig

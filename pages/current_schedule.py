@@ -81,7 +81,8 @@ def update_input(table_data, input_data):
                             n_discharge_orders = len(input_stop['dischargeOrders'])
                             n_load_orders_table = table_stop['Number of load containers']
                             n_discharge_orders_orders_table = table_stop['Number of discharge containers']
-                            if n_load_orders == n_load_orders_table and n_discharge_orders == n_discharge_orders_orders_table:
+                            if (n_load_orders == n_load_orders_table and
+                                    n_discharge_orders == n_discharge_orders_orders_table):
                                 input_stop['timeWindow']['startDateTime'] = str(table_stop['Planned arrival'])
                                 input_stop['timeWindow']['endDateTime'] = str(table_stop['Planned departure'])
                                 if input_stop['fixedStop'] != table_stop['Fixed stop']:
