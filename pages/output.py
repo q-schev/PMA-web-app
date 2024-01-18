@@ -129,7 +129,7 @@ def process_input_for_planning_board(data):
     return df
 
 
-def create_planning_board(df, data):
+def create_planning_board(df, data, location_colors):
     vessels = df.vessel.unique().tolist()
     if len(vessels) > 2:
         alpha = len(vessels)
@@ -351,7 +351,7 @@ def get_vessels_from_data(data):
     return vessels
 
 
-def create_bar_chart(routes):
+def create_bar_chart(routes, location_colors):
     no_of_containers_per_teu_per_barge = pd.DataFrame(columns=['Barge', 'Location', 'TEU'])
     for route in routes:
         barge = route['vessel']
@@ -374,12 +374,50 @@ def create_bar_chart(routes):
             else:
                 no_of_containers_per_teu_per_barge.loc[len(no_of_containers_per_teu_per_barge)] = [barge, location,
                                                                                                    teu_total]
+
     no_of_containers_per_teu_per_barge_without_mct = no_of_containers_per_teu_per_barge[
         no_of_containers_per_teu_per_barge.iloc[:, 1] != 'MCT']
-    bar_fig = px.bar(no_of_containers_per_teu_per_barge_without_mct, x='Barge', y='TEU', color='Location',
-                     title='Moves (in TEU) for each barge per terminal')
+
+    # Get unique locations and dynamically choose a color scale
+    unique_locations = no_of_containers_per_teu_per_barge_without_mct['Location'].unique()
+
+    # Sort DataFrame based on 'Barge' and 'Location' columns
+    no_of_containers_per_teu_per_barge_without_mct['Location'] = pd.Categorical(
+        no_of_containers_per_teu_per_barge_without_mct['Location'], categories=unique_locations, ordered=True
+    )
+    no_of_containers_per_teu_per_barge_without_mct.sort_values(by=['Barge', 'Location'], inplace=True)
+
+    # Create a stacked bar chart
+    bar_fig = go.Figure()
+
+    for barge, group_df in no_of_containers_per_teu_per_barge_without_mct.groupby('Barge'):
+        for index, row in group_df.iterrows():
+            location = row['Location']
+            color = location_colors[location]
+            # Add a trace for each row
+            bar_fig.add_trace(go.Bar(
+                x=[barge],
+                y=[row['TEU']],
+                name=location,
+                marker_color=color,
+            ))
+
+    # Update layout
+    bar_fig.update_layout(barmode='stack', title='Moves (in TEU) for each barge per terminal')
 
     return bar_fig
+
+
+def assign_colors_to_terminals(data):
+    unique_locations = []
+    for route in data['routes']:
+        for stop in route['stops']:
+            if stop['terminalId'] not in unique_locations:
+                unique_locations.append(stop['terminalId'])
+    num_colors_needed = len(unique_locations)
+    color_scale = px.colors.qualitative.Alphabet
+    location_colors = {location: color_scale[i % num_colors_needed] for i, location in enumerate(unique_locations)}
+    return location_colors
 
 
 @dash.callback(
@@ -392,8 +430,9 @@ def update_figure(output_data, input_data):
     if output_data is None or len(output_data) == 0:
         return dash.no_update
     else:
+        location_colors = assign_colors_to_terminals(output_data)
         result = process_input_for_planning_board(output_data)
-        return create_planning_board(result, input_data)
+        return create_planning_board(result, input_data, location_colors)
 
 
 @dash.callback(
@@ -478,6 +517,7 @@ def update_graph(output_data):
         return dash.no_update
     else:
         print("Creating Bar Chart")
-        bar_fig = create_bar_chart(output_data['routes'])
+        location_colors = assign_colors_to_terminals(output_data)
+        bar_fig = create_bar_chart(output_data['routes'], location_colors)
         print("Bar Chart Created")
         return bar_fig
