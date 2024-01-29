@@ -49,7 +49,9 @@ def parse_input(vessels):
                 'backgroundColor': 'blue',
                 'fontWeight': 'bold'
             },
-            editable=True
+            editable=True,
+            export_format='xlsx',
+            export_headers='display',
         ),
     ])
 

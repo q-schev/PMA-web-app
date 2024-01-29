@@ -13,6 +13,7 @@ import requests
 import polyline
 import shapely.geometry
 import numpy as np
+import plotly.io as pio
 
 dash.register_page(__name__)
 
@@ -38,6 +39,13 @@ layout = html.Div([
     ], style={'overflowX': 'scroll',
               'height': '85vh',
               'width': '99vw'}),
+    html.A(
+        html.Button('Download Planning Board as HTML', id='download-button'),
+        id='download-link',
+        download="planning_board.html",
+        href="",
+        target="_blank"
+    ),
     html.Br(),
     html.Div(id='vessel-dropdown'),
     html.Div(children=[dcc.Graph(
@@ -57,6 +65,18 @@ layout = html.Div([
                'display': 'inline-block'}
     ),
     ]),
+    # html.Br(),
+    # html.Div([
+    #     html.H1('Stacked Bar Chart for Each Vessel'),
+    #
+    #     # Dropdown for selecting vessel
+    #     html.Div(id='vessel-dropdown'),
+    #
+    #     # Stacked bar chart
+    #     dcc.Graph(id='bar-chart-per-barge', figure=fig),
+    # ]),
+    html.Br(),
+    html.Div(id='output-data-unplanned'),
     html.Br(),
     html.Div(id='output-data-upload'),
 ])
@@ -139,9 +159,16 @@ def create_planning_board(df, data, location_colors):
                                      hover_data=["loading20", "loading40", "loading45", "discharging20",
                                                  "discharging40",
                                                  "discharging45", "teuOnBoardAfterStop", "weightOnBoardAfterStop"],
-                                     color_discrete_sequence=px.colors.qualitative.Alphabet, height=alpha * 40,
+                                     color_discrete_sequence=px.colors.qualitative.Alphabet, height=alpha * 120,
                                      width=alpha * 600)
     planning_board_fig.update_yaxes(autorange="reversed")  # otherwise tasks are listed from the bottom up
+    planning_board_fig.update_layout(legend=dict(
+        orientation="h",
+        yanchor="bottom",
+        y=1.02,
+        xanchor="right",
+        x=1
+    ))
 
     date_format = '%Y-%m-%dT%H:%M:%SZ'
     timestamp = pd.to_datetime(data['timestamp'], format=date_format) + datetime.timedelta(days=2)
@@ -232,6 +259,46 @@ def parse_output(data):
             },
             style_header={
                 'backgroundColor': 'orange',
+                'fontWeight': 'bold'
+            },
+            export_format='xlsx',
+            export_headers='display',
+        ),
+    ])
+
+
+def parse_unplanned(output_data, input_data):
+    unplanned = output_data['unplannedOrders']
+    input_orders = input_data['orders']
+    df = pd.DataFrame(
+        columns=['orderId', 'containerType', 'TEU', 'weight', 'loadTerminal', 'dischargeTerminal', 'earliestPickUp',
+                 'latestPickUp', 'earliestDeadline', 'latestDeadline', 'reefer', 'dangerousGoods'])
+    for order in input_orders:
+        if str(order['orderId']) in unplanned:
+            new_entry = pd.DataFrame.from_dict(
+                {'orderId': [order['orderId']], 'containerType': [order['containerType']], 'TEU': [order['TEU']],
+                 'weight': [order['weight']], 'loadTerminal': [order['loadTerminal']],
+                 'dischargeTerminal': [order['dischargeTerminal']],
+                 'earliestPickUp': [order['loadTimeWindow']['startDateTime']],
+                 'latestPickUp': [order['loadTimeWindow']['endDateTime']],
+                 'earliestDeadline': [order['dischargeTimeWindow']['startDateTime']],
+                 'latestDeadline': [order['dischargeTimeWindow']['endDateTime']], 'reefer': [order['reefer']],
+                 'dangerousGoods': [order['dangerGoods']]})
+            df = pd.concat([df, new_entry], ignore_index=True)
+
+    return html.Div([
+        dash_table.DataTable(
+            df.to_dict('records'),
+            [{'name': i, 'id': i} for i in df.columns],
+            style_table={'overflowX': 'auto'},
+            style_cell={
+                'height': 'auto',
+                # all three widths are needed
+                'minWidth': '180px', 'width': '180px', 'maxWidth': '180px',
+                'whiteSpace': 'normal'
+            },
+            style_header={
+                'backgroundColor': 'red',
                 'fontWeight': 'bold'
             },
             export_format='xlsx',
@@ -420,19 +487,56 @@ def assign_colors_to_terminals(data):
     return location_colors
 
 
+# def create_bar_chart_per_barge(df, location_colors, selected_vessel):
+#     # Filter data based on selected vessel
+#     selected_data = df[df['vessel'] == selected_vessel]
+#
+#     # Create a stacked bar chart
+#     bar_chart_per_barge_fig = go.Figure()
+#
+#     for location in df['terminalId_from'].unique():
+#         filtered_data = selected_data[selected_data['terminalId_from'] == location]
+#         color = location_colors.get(location, 'gray')  # Use 'gray' if color not specified
+#
+#         bar_chart_per_barge_fig.add_trace(go.Bar(
+#             x=filtered_data['terminalId_from'] + ' to ' + filtered_data['terminalId_to'],
+#             y=filtered_data['teu'],
+#             name=location,
+#             marker_color=color,
+#         ))
+#
+#     # Update layout
+#     bar_chart_per_barge_fig.update_layout(
+#         barmode='stack',
+#         title=f'Stacked Bar Chart for Vessel {selected_vessel}',
+#         xaxis_title='Leg',
+#         yaxis_title='TEU',
+#     )
+#
+#     return bar_chart_per_barge_fig
+
+
 @dash.callback(
     Output('planning_board', 'figure'),
+    Output('download-link', 'href'),
     Input('store-output', 'data'),
-    Input('store-input', 'data')
+    Input('store-input', 'data'),
+    Input('download-button', 'n_clicks'),
     # prevent_initial_call=True
 )
-def update_figure(output_data, input_data):
+def update_figure(output_data, input_data, n_clicks):
     if output_data is None or len(output_data) == 0:
-        return dash.no_update
+        return dash.no_update, dash.no_update
     else:
         location_colors = assign_colors_to_terminals(output_data)
         result = process_input_for_planning_board(output_data)
-        return create_planning_board(result, input_data, location_colors)
+        planning_board = create_planning_board(result, input_data, location_colors)
+        if n_clicks is None:
+            return planning_board, dash.no_update
+        else:
+            html_filename = "planning_board.html"
+            pio.write_html(planning_board, html_filename, full_html=True)
+            return planning_board, f'./{html_filename}'
 
 
 @dash.callback(
@@ -481,6 +585,19 @@ def update_output(data):
 
 
 @dash.callback(
+    Output('output-data-unplanned', 'children'),
+    Input('store-output', 'data'),
+    Input('store-input', 'data')
+    # prevent_initial_call=True
+)
+def update_output(output_data, input_data):
+    if output_data is None or len(output_data) == 0:
+        return html.H3('')
+    else:
+        return parse_unplanned(output_data, input_data)
+
+
+@dash.callback(
     Output('vessel-dropdown', 'children'),
     Input('store-input', 'data')
 )
@@ -511,13 +628,37 @@ def update_graph(input_data, output_data, vessel_name):
     Input('store-output', 'data'),
 )
 def update_graph(output_data):
-    print("Update Graph Callback Called")
     if output_data is None or len(output_data) == 0:
-        print("No Output Data")
         return dash.no_update
     else:
-        print("Creating Bar Chart")
         location_colors = assign_colors_to_terminals(output_data)
         bar_fig = create_bar_chart(output_data['routes'], location_colors)
-        print("Bar Chart Created")
         return bar_fig
+
+# @dash.callback(
+#     Output('bar-chart-per-barge', 'figure'),
+#     Input('store-output', 'data'),
+#     Input('vessel-dropdown', 'value')
+# )
+# def update_graph(output_data, vessel_name):
+#     print("Update Graph Callback Called")
+#     if output_data is None or len(output_data) == 0:
+#         print("No Output Data")
+#         return dash.no_update
+#     else:
+#         print("Creating Bar Chart")
+#         location_colors = assign_colors_to_terminals(output_data)
+#
+#         bar_data = pd.DataFrame(columns=['vessel', 'from', 'to', 'destination_load', 'teu'])
+#         for route in output_data['routes']:
+#             vessel = route['vessel']
+#             stops = route['stops']
+#             for i in range(1, len(stops)):
+#                 previous_stop = stops[i-1]
+#                 stop = stops[i - 1]
+#                 terminal_from = previous_stop['terminalId']
+#                 terminal_to = stop['terminalId']
+#
+#         bar_chart_per_barge_fig = create_bar_chart_per_barge(output_data['routes'], location_colors, vessel_name)
+#         print("Bar Chart Created")
+#         return bar_chart_per_barge_fig
