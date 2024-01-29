@@ -35,8 +35,9 @@ def parse_input(vessels):
 
     return html.Div([
         dash_table.DataTable(
-            vessels_df.to_dict('records'),
-            [{'name': i, 'id': i} for i in vessels_df.columns],
+            id='vessel-table',
+            data=vessels_df.to_dict('records'),
+            columns=[{'name': i, 'id': i} for i in vessels_df.columns],
             style_table={'overflowX': 'auto'},
             style_cell={
                 'height': 'auto',
@@ -48,7 +49,9 @@ def parse_input(vessels):
                 'backgroundColor': 'blue',
                 'fontWeight': 'bold'
             },
-            editable=True
+            editable=True,
+            export_format='xlsx',
+            export_headers='display',
         ),
     ])
 
@@ -65,3 +68,25 @@ def update_input(data):
         vessels = data['vessels']
         vessels_layout = parse_input(vessels)
         return vessels_layout
+
+
+@dash.callback(
+    Output('store-input', 'data', allow_duplicate=True),
+    Input('vessel-table', 'data'),
+    Input('store-input', 'data'),
+    prevent_initial_call=True
+)
+def update_input(table_data, input_data):
+    if input_data is None or len(input_data) == 0:
+        return dash.no_update
+    else:
+        for table_vessel in table_data:
+            for input_vessel in input_data['vessels']:
+                if input_vessel['id'] == table_vessel['Barge']:
+                    input_vessel['capacityTEU'] = int(table_vessel['TEU capacity'])
+                    input_vessel['capacityWeight'] = int(table_vessel['Weight capacity'])
+                    input_vessel['capacityReefer'] = int(table_vessel['Reefer capacity'])
+                    input_vessel['capacityDangerGoods'] = int(table_vessel['Dangerous goods capacity'])
+                    input_vessel['kilometerCost'] = int(table_vessel['Penalty per sailed km'])
+                    input_vessel['forbiddenTerminals'] = str(table_vessel['Forbidden terminals'])
+        return input_data

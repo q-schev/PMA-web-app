@@ -49,6 +49,9 @@ def parse_input(data):
                 'backgroundColor': 'white',
                 'fontWeight': 'bold'
             },
+            editable=True,
+            export_format='xlsx',
+            export_headers='display',
         ),
     ])
 

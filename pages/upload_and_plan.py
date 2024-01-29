@@ -298,7 +298,7 @@ def import_output_json():
         file_created = os.path.getmtime(filename)
         k = k + 1
     end = time.time()
-    f = open("planning output", "r")
+    f = open(filename, "r")
     imported_output_json = json.load(f)
     print('Imported PMA output')
     return imported_output_json
@@ -340,9 +340,9 @@ def parse_contents(data):
 
 
 @dash.callback(
-    Output('store-input', 'data'),
+    Output('store-input', 'data', allow_duplicate=True),
     Input('upload-data', 'contents'),
-    # prevent_initial_call=True
+    prevent_initial_call=True
 )
 def update_input(contents):
     if contents is None:
